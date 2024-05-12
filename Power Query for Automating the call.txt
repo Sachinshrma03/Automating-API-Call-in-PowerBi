@@ -1,0 +1,52 @@
+let
+    // Create the MakeAPICall function
+    MakeAPICall = (lat1, long1, lat2, long2) =>
+    let
+        apiUrl = "https://apis.tollguru.com/toll/v2/origin-destination-waypoints",
+        headers = [
+            #"Content-Type" = "application/json",
+            #"x-api-key" = "",
+            #"Accept" = "application/json"
+        ],
+        requestBody =
+            "{""from"": {
+                ""lat"": " & Number.ToText(lat1) & ",
+                ""lng"": " & Number.ToText(long1) & "
+            },
+            ""to"": {
+                ""lat"": " & Number.ToText(lat2) & ",
+            ""lng"": " & Number.ToText(long2) & "
+            },
+            ""serviceProvider"": ""here"",
+            ""vehicle"": {
+                ""type"": ""2AxlesAuto"",
+                ""weight"": {
+                    ""value"": ""25000"",
+                    ""unit"": ""kg""
+                },
+                ""axles"": ""6""
+            }
+        }",
+        response = Json.Document(Web.Contents(apiUrl, [Headers=headers, Content=Text.ToBinary(requestBody)]))
+    in
+        response,
+
+    // Create the ExtractData function
+    ExtractData = (row) =>
+        let
+            lat1 = row[Latitude],
+            long1 = row[Longitude],
+            lat2 = row[End_Lat],
+            long2 = row[End_Long],
+            apiResponse = MakeAPICall(lat1, long1, lat2, long2),
+            minimumTollCost = if Record.HasFields(apiResponse, "routes") and List.Count(apiResponse[routes]) > 0 then List.Min(List.Transform(apiResponse[routes], each Record.FieldOrDefault(_[costs], "minimumTollCost", null))) else null
+        in
+            Record.AddField(row, "minimumTollCost", minimumTollCost),
+
+    // Load your table
+    source = #"Sample-data", // Replace with your actual table name
+
+    // Transform each row using ExtractData function
+    transformedTable = Table.FromRecords(List.Transform(Table.ToRecords(source), each ExtractData(_)))
+in
+    transformedTable
